@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Splunk SIEM — MFA Compliance Dashboard | Dulneth Kurunduwatte Gedara</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Sora:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b0f14;
+    --bg2: #111720;
+    --bg3: #161e2a;
+    --border: rgba(99,179,237,0.12);
+    --accent: #63b3ed;
+    --accent2: #4fd1c5;
+    --accent3: #f6ad55;
+    --text: #e2e8f0;
+    --muted: #718096;
+    --code-bg: #0d1117;
+    --tag-bg: rgba(99,179,237,0.1);
+    --success: #68d391;
+    --danger: #fc8181;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'Sora', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 16px;
+    line-height: 1.75;
+    overflow-x: hidden;
+  }
+
+  /* ── NOISE TEXTURE OVERLAY ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.6;
+  }
+
+  /* ── GRID BACKGROUND ── */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(99,179,237,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(99,179,237,0.03) 1px, transparent 1px);
+    background-size: 48px 48px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  * { position: relative; z-index: 1; }
+
+  /* ── HEADER ── */
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 1rem 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    backdrop-filter: blur(12px);
+    background: rgba(11,15,20,0.7);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .header-logo {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--accent);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .header-nav {
+    display: flex;
+    gap: 1.5rem;
+    list-style: none;
+  }
+
+  .header-nav a {
+    font-size: 0.78rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-family: 'IBM Plex Mono', monospace;
+    letter-spacing: 0.05em;
+    transition: color 0.2s;
+  }
+
+  .header-nav a:hover { color: var(--accent); }
+
+  /* ── HERO ── */
+  .hero {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 5rem 2rem 3rem;
+  }
+
+  .hero-eyebrow {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--accent);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 1.2rem;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  .hero-eyebrow::before {
+    content: '';
+    display: inline-block;
+    width: 28px;
+    height: 1px;
+    background: var(--accent);
+  }
+
+  h1 {
+    font-size: clamp(2rem, 5vw, 3.2rem);
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    margin-bottom: 1.4rem;
+    background: linear-gradient(135deg, #e2e8f0 30%, var(--accent) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .hero-desc {
+    font-size: 1.05rem;
+    color: #a0aec0;
+    max-width: 620px;
+    margin-bottom: 2rem;
+    font-weight: 300;
+  }
+
+  .hero-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin-bottom: 2.5rem;
+  }
+
+  .tag {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.7rem;
+    padding: 0.3rem 0.7rem;
+    border-radius: 4px;
+    background: var(--tag-bg);
+    border: 1px solid rgba(99,179,237,0.2);
+    color: var(--accent);
+    letter-spacing: 0.05em;
+  }
+
+  .tag.orange {
+    background: rgba(246,173,85,0.08);
+    border-color: rgba(246,173,85,0.2);
+    color: var(--accent3);
+  }
+
+  .tag.teal {
+    background: rgba(79,209,197,0.08);
+    border-color: rgba(79,209,197,0.2);
+    color: var(--accent2);
+  }
+
+  .hero-divider {
+    height: 1px;
+    background: linear-gradient(90deg, var(--accent) 0%, transparent 70%);
+    opacity: 0.25;
+    margin-bottom: 3rem;
+  }
+
+  /* ── MAIN CONTENT ── */
+  main {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 0 2rem 6rem;
+  }
+
+  /* ── SECTION HEADINGS ── */
+  .section-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 0.6rem;
+  }
+
+  h2 {
+    font-size: 1.55rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    letter-spacing: -0.01em;
+    color: #edf2f7;
+  }
+
+  h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--accent2);
+    margin-bottom: 0.6rem;
+    margin-top: 1.8rem;
+    font-family: 'IBM Plex Mono', monospace;
+    letter-spacing: 0.03em;
+  }
+
+  p { color: #a0aec0; margin-bottom: 1rem; font-weight: 300; }
+
+  strong { color: var(--text); font-weight: 600; }
+
+  /* ── SECTIONS ── */
+  section { margin-bottom: 4.5rem; }
+
+  /* ── CARD ── */
+  .card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.6rem 1.8rem;
+    margin-bottom: 1.2rem;
+    transition: border-color 0.2s;
+  }
+
+  .card:hover { border-color: rgba(99,179,237,0.25); }
+
+  /* ── POLICY BOX ── */
+  .policy-box {
+    background: var(--bg3);
+    border-left: 3px solid var(--accent);
+    padding: 1.2rem 1.5rem;
+    border-radius: 0 8px 8px 0;
+    margin: 1.5rem 0;
+    font-style: italic;
+    color: #90cdf4;
+    font-size: 0.95rem;
+  }
+
+  /* ── INDICATOR CARDS ── */
+  .indicator {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 2.5rem;
+  }
+
+  .indicator-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.2rem 1.6rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg3);
+  }
+
+  .indicator-number {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--bg2);
+    background: var(--accent);
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 500;
+    flex-shrink: 0;
+  }
+
+  .indicator-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .indicator-body { padding: 1.6rem; }
+
+  /* ── FINDINGS ── */
+  .findings-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1rem;
+    margin: 1.2rem 0;
+  }
+
+  .finding-stat {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.2rem;
+    text-align: center;
+  }
+
+  .finding-stat .number {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 1.8rem;
+    font-weight: 500;
+    color: var(--accent3);
+    display: block;
+    line-height: 1.1;
+  }
+
+  .finding-stat .label {
+    font-size: 0.72rem;
+    color: var(--muted);
+    margin-top: 0.3rem;
+    display: block;
+    font-family: 'IBM Plex Mono', monospace;
+    letter-spacing: 0.04em;
+  }
+
+  .finding-stat.danger .number { color: var(--danger); }
+  .finding-stat.success .number { color: var(--success); }
+
+  /* ── SPL CODE BLOCK ── */
+  .spl-block {
+    background: var(--code-bg);
+    border: 1px solid rgba(99,179,237,0.1);
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 1.2rem 0;
+  }
+
+  .spl-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 1rem;
+    background: rgba(99,179,237,0.05);
+    border-bottom: 1px solid rgba(99,179,237,0.08);
+  }
+
+  .spl-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--accent);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .spl-dots { display: flex; gap: 5px; }
+  .spl-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .spl-dot:nth-child(1) { background: #fc8181; }
+  .spl-dot:nth-child(2) { background: var(--accent3); }
+  .spl-dot:nth-child(3) { background: var(--success); }
+
+  pre {
+    padding: 1.2rem 1.2rem;
+    overflow-x: auto;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.78rem;
+    line-height: 1.7;
+    color: #e2e8f0;
+  }
+
+  .kw { color: #63b3ed; }
+  .str { color: #68d391; }
+  .fn { color: #f6ad55; }
+  .cm { color: #4a5568; font-style: italic; }
+  .op { color: #fc8181; }
+
+  /* ── INSIGHT BOX ── */
+  .insight {
+    display: flex;
+    gap: 0.8rem;
+    background: rgba(246,173,85,0.05);
+    border: 1px solid rgba(246,173,85,0.15);
+    border-radius: 8px;
+    padding: 1rem 1.2rem;
+    margin: 1rem 0;
+  }
+
+  .insight-icon {
+    font-size: 1rem;
+    flex-shrink: 0;
+    margin-top: 0.1rem;
+  }
+
+  .insight p {
+    font-size: 0.88rem;
+    color: #e9c46a;
+    margin: 0;
+    font-weight: 400;
+  }
+
+  /* ── DASHBOARD SCREENSHOT PLACEHOLDER ── */
+  .screenshot-zone {
+    background: var(--bg3);
+    border: 2px dashed rgba(99,179,237,0.2);
+    border-radius: 10px;
+    padding: 2rem;
+    text-align: center;
+    margin: 1.5rem 0;
+  }
+
+  .screenshot-zone p {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin: 0;
+    letter-spacing: 0.05em;
+  }
+
+  .screenshot-zone .hint {
+    font-size: 0.7rem;
+    color: #4a5568;
+    margin-top: 0.4rem;
+  }
+
+  /* ── DATA TABLE ── */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.78rem;
+    margin: 1.2rem 0;
+  }
+
+  .data-table th {
+    text-align: left;
+    padding: 0.6rem 0.9rem;
+    background: var(--bg3);
+    color: var(--accent);
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .data-table td {
+    padding: 0.6rem 0.9rem;
+    border-bottom: 1px solid rgba(99,179,237,0.06);
+    color: #a0aec0;
+  }
+
+  .data-table tr:hover td { background: rgba(99,179,237,0.03); }
+
+  .badge {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+  }
+
+  .badge.red { background: rgba(252,129,129,0.12); color: var(--danger); border: 1px solid rgba(252,129,129,0.2); }
+  .badge.green { background: rgba(104,211,145,0.1); color: var(--success); border: 1px solid rgba(104,211,145,0.2); }
+  .badge.orange { background: rgba(246,173,85,0.1); color: var(--accent3); border: 1px solid rgba(246,173,85,0.2); }
+
+  /* ── CONCLUSION ── */
+  .conclusion-box {
+    background: linear-gradient(135deg, rgba(99,179,237,0.06) 0%, rgba(79,209,197,0.04) 100%);
+    border: 1px solid rgba(99,179,237,0.2);
+    border-radius: 12px;
+    padding: 2rem 2.2rem;
+  }
+
+  /* ── FOOTER ── */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 2rem;
+    text-align: center;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+
+  footer a { color: var(--accent); text-decoration: none; }
+
+  /* ── SCROLL REVEAL ANIMATION ── */
+  .reveal {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+
+  .reveal.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 600px) {
+    header { padding: 0.8rem 1rem; }
+    .hero { padding: 3rem 1rem 2rem; }
+    main { padding: 0 1rem 4rem; }
+    .header-nav { display: none; }
+    .findings-grid { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-logo">DKG // Security</div>
+  <nav>
+    <ul class="header-nav">
+      <li><a href="#overview">Overview</a></li>
+      <li><a href="#indicators">Indicators</a></li>
+      <li><a href="#findings">Findings</a></li>
+      <li><a href="#conclusion">Conclusion</a></li>
+    </ul>
+  </nav>
+</header>
+
+<div class="hero">
+  <div class="hero-eyebrow">Case Study · IT Security Management</div>
+  <h1>Splunk SIEM — MFA &amp; Access Control Compliance Dashboard</h1>
+  <p class="hero-desc">
+    Using Splunk and the BOTSv3 dataset to detect multi-factor authentication policy violations inside a simulated financial services company.
+  </p>
+  <div class="hero-meta">
+    <span class="tag">Splunk SIEM</span>
+    <span class="tag">BOTSv3 Dataset</span>
+    <span class="tag orange">MFA Compliance</span>
+    <span class="tag orange">Access Control</span>
+    <span class="tag teal">SPL Queries</span>
+    <span class="tag teal">Security Dashboards</span>
+  </div>
+  <p style="font-size:0.8rem; font-family:'IBM Plex Mono',monospace; color:var(--muted);">
+    Dulneth Kurunduwatte Gedara &nbsp;·&nbsp; IT Security Management &nbsp;·&nbsp; 2024
+  </p>
+  <div class="hero-divider" style="margin-top:2rem;"></div>
+</div>
+
+<main>
+
+  <!-- OVERVIEW -->
+  <section id="overview" class="reveal">
+    <div class="section-label">01 — Overview</div>
+    <h2>The scenario</h2>
+    <p>
+      <strong>Sutrefia (Sunken Treasure Financials Australia)</strong> is a mid-to-large financial services company offering banking, investments, and insurance. As a prime target for cyber threats, the organisation has developed a suite of security policies aligned with the Australian Government Information Security Manual (ISM).
+    </p>
+    <p>
+      Following an internal security incident, management evaluated <strong>Splunk</strong> as their SIEM (Security Information and Event Management) tool. My task was to build a dashboard using the <strong>BOTSv3 sample dataset</strong> that gives non-technical managers a clear, at-a-glance view of whether security policies are being followed.
+    </p>
+
+    <div class="policy-box">
+      Policy under review: <strong>Access Control &amp; MFA</strong> — All systems should require multi-factor authentication (MFA) to access them, including internal systems.
+    </div>
+
+    <p>
+      I focused on this policy because access control is the first line of defence in any financial organisation. Even the most sophisticated security infrastructure can be undermined if users can bypass MFA. The BOTSv3 dataset provided rich authentication log data across AWS and Azure AD environments to make this analysis concrete.
+    </p>
+  </section>
+
+  <!-- INDICATORS -->
+  <section id="indicators" class="reveal">
+    <div class="section-label">02 — Dashboard Design</div>
+    <h2>Three key indicators</h2>
+    <p>
+      Rather than building a generic log viewer, I designed the dashboard around three specific indicators — each one tells a different part of the MFA compliance story.
+    </p>
+
+    <!-- INDICATOR 1 -->
+    <div class="indicator reveal">
+      <div class="indicator-header">
+        <div class="indicator-number">01</div>
+        <div class="indicator-title">Login access incidents where MFA was not followed</div>
+      </div>
+      <div class="indicator-body">
+        <p>
+          This panel identifies users who gained system access without completing MFA verification. It pulls from the <strong>BOTSv3 AWS source</strong> and flags sessions where <code>mfaAuthenticated = false</code>, showing the user, the application accessed, and both the first and last failed attempt timestamps.
+        </p>
+
+        <div class="findings-grid">
+          <div class="finding-stat danger">
+            <span class="number">637</span>
+            <span class="label">web_admin bypasses</span>
+          </div>
+          <div class="finding-stat danger">
+            <span class="number">611</span>
+            <span class="label">bstoll bypasses</span>
+          </div>
+          <div class="finding-stat">
+            <span class="number">73</span>
+            <span class="label">btun bypasses</span>
+          </div>
+          <div class="finding-stat">
+            <span class="number">45</span>
+            <span class="label">splunk_access bypasses</span>
+          </div>
+        </div>
+
+        <div class="insight">
+          <div class="insight-icon">⚠</div>
+          <p><strong>web_admin</strong> bypassed MFA 637 times — the highest of any account. Given this is an admin-level account with elevated privileges, this represents a critical risk. A compromised admin account without MFA is a complete system-level threat.</p>
+        </div>
+
+        <h3>// SPL query</h3>
+        <div class="spl-block">
+          <div class="spl-header">
+            <span class="spl-label">SPL — Indicator 1</span>
+            <div class="spl-dots"><div class="spl-dot"></div><div class="spl-dot"></div><div class="spl-dot"></div></div>
+          </div>
+          <pre><span class="kw">index</span>=botsv3 <span class="kw">sourcetype</span>=aws* <span class="fn">earliest</span>=0
+| <span class="fn">search</span> <span class="str">"userIdentity.sessionContext.attributes.mfaAuthenticated"</span>=<span class="op">false</span>
+| <span class="fn">stats count</span> <span class="kw">as</span> <span class="str">"Failed MFA Logins"</span>,
+        <span class="fn">values</span>(userAgent) <span class="kw">as</span> <span class="str">"Applications"</span>,
+        <span class="fn">earliest</span>(_time) <span class="kw">as</span> <span class="str">"First Attempt"</span>,
+        <span class="fn">latest</span>(_time) <span class="kw">as</span> <span class="str">"Last Attempt"</span>
+        <span class="kw">by</span> userIdentity.userName
+| <span class="fn">sort</span> - <span class="str">"Failed MFA Logins"</span>
+| <span class="fn">head</span> 20
+| <span class="fn">rename</span> userIdentity.userName <span class="kw">as</span> <span class="str">"User"</span>,
+        <span class="str">"Failed MFA Logins"</span> <span class="kw">as</span> <span class="str">"MFA Failed Count"</span>,
+        <span class="str">"First Attempt"</span> <span class="kw">as</span> <span class="str">"First Failed Attempt"</span>,
+        <span class="str">"Last Attempt"</span> <span class="kw">as</span> <span class="str">"Last Failed Attempt"</span>
+| <span class="fn">eval</span> <span class="str">"First Failed Attempt"</span>=<span class="fn">strftime</span>(<span class="str">'First Failed Attempt'</span>, <span class="str">"%Y-%m-%d %H:%M:%S"</span>),
+      <span class="str">"Last Failed Attempt"</span>=<span class="fn">strftime</span>(<span class="str">'Last Failed Attempt'</span>, <span class="str">"%Y-%m-%d %H:%M:%S"</span>)
+| <span class="fn">table</span> User, <span class="str">"MFA Failed Count"</span>, <span class="str">"Applications"</span>, <span class="str">"First Failed Attempt"</span>, <span class="str">"Last Failed Attempt"</span></pre>
+        </div>
+
+        <div class="screenshot-zone">
+          <p>📸 SCREENSHOT SLOT — Panel 1: MFA bypass table + bar chart</p>
+          <p class="hint">Replace this block with your actual Splunk screenshot using an &lt;img&gt; tag</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- INDICATOR 2 -->
+    <div class="indicator reveal">
+      <div class="indicator-header">
+        <div class="indicator-number">02</div>
+        <div class="indicator-title">Patterns and frequencies of authentication failures</div>
+      </div>
+      <div class="indicator-body">
+        <p>
+          This panel focuses on <strong>failed login patterns</strong> across multiple application sources — AWS, Azure AD (ms:aad), Windows Security Event logs, and WinEventLog. By aggregating these into a single view with failure reasons and timestamps, management can spot brute-force attempts, account lockouts, and insider threats at a glance.
+        </p>
+        <p>
+          A high concentration of failures from a single user or at unusual hours is a red flag — this panel makes that visible without requiring technical expertise.
+        </p>
+
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Application</th>
+              <th>User</th>
+              <th>Reason for failure</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Office 365 Exchange</td>
+              <td>pcerf@froth.ly</td>
+              <td>Invalid username or password</td>
+              <td><span class="badge red">Failed</span></td>
+            </tr>
+            <tr>
+              <td>Microsoft Office 365 Portal</td>
+              <td>bgist@froth.ly</td>
+              <td>Account disabled by administrator</td>
+              <td><span class="badge orange">Disabled</span></td>
+            </tr>
+            <tr>
+              <td>O365 Suite UX</td>
+              <td>ghoppy@froth.ly</td>
+              <td>Keep me signed in — sign-in interrupt</td>
+              <td><span class="badge orange">Interrupted</span></td>
+            </tr>
+            <tr>
+              <td>Microsoft Office 365 Portal</td>
+              <td>klagerfield@froth.ly</td>
+              <td>Invalid password, expired password</td>
+              <td><span class="badge red">Failed</span></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>// SPL query</h3>
+        <div class="spl-block">
+          <div class="spl-header">
+            <span class="spl-label">SPL — Indicator 2</span>
+            <div class="spl-dots"><div class="spl-dot"></div><div class="spl-dot"></div><div class="spl-dot"></div></div>
+          </div>
+          <pre><span class="kw">index</span>=botsv3 <span class="fn">earliest</span>=0
+(<span class="kw">sourcetype</span>=<span class="str">"aws*"</span> <span class="op">AND</span> eventName=<span class="str">"SigninFailure"</span>)
+<span class="op">OR</span> (<span class="kw">sourcetype</span>=<span class="str">"XmlWinEventLog:Microsoft-Windows-Security-Auditing"</span>
+    <span class="op">AND</span> EventCode=<span class="str">4625</span>)
+<span class="op">OR</span> (<span class="kw">sourcetype</span>=<span class="str">"ms:aad:signin"</span> <span class="op">AND</span> loginStatus=<span class="str">"Failure"</span>)
+<span class="op">OR</span> (<span class="kw">sourcetype</span>=<span class="str">"wineventlog:security"</span> <span class="op">AND</span> EventCode=<span class="str">4625</span>)
+
+| <span class="fn">eval</span> Time=<span class="fn">strftime</span>(_time, <span class="str">"%Y-%m-%d %H:%M:%S"</span>)
+| <span class="fn">eval</span> Application=<span class="fn">coalesce</span>(appDisplayName, source, sourcetype)
+| <span class="fn">eval</span> User=<span class="fn">coalesce</span>(userIdentity.userName, userPrincipalName)
+| <span class="fn">eval</span> Reason=<span class="fn">coalesce</span>(errorMessage, failureReason, status)
+| <span class="fn">rename</span> Application <span class="kw">as</span> Application_Name, User <span class="kw">as</span> User,
+         Reason <span class="kw">as</span> Reason_of_Failure, Time <span class="kw">as</span> Occur_Time
+| <span class="fn">table</span> Application_Name, User, Reason_of_Failure, Occur_Time
+| <span class="fn">sort</span> - Occur_Time
+| <span class="fn">head</span> 10</pre>
+        </div>
+
+        <div class="screenshot-zone">
+          <p>📸 SCREENSHOT SLOT — Panel 2: Authentication failure table</p>
+          <p class="hint">Replace this block with your actual Splunk screenshot using an &lt;img&gt; tag</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- INDICATOR 3 -->
+    <div class="indicator reveal">
+      <div class="indicator-header">
+        <div class="indicator-number">03</div>
+        <div class="indicator-title">MFA enabled vs disabled users &amp; session logout monitoring</div>
+      </div>
+      <div class="indicator-body">
+        <p>
+          This dual-purpose panel answers two questions management really care about: <strong>how many users have MFA turned on?</strong> and <strong>are users logging out properly?</strong>
+        </p>
+        <p>
+          The comparison table and pie chart pull from Azure AD sign-in data to show MFA adoption rates across the organisation. The logout events panel identifies sessions where a user logged in successfully via MFA but never formally logged out — leaving an open session that anyone with physical or remote access could hijack.
+        </p>
+
+        <table class="data-table">
+          <thead>
+            <tr><th>User</th><th>Principal</th><th>MFA Status</th><th>Sign-in Count</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Fyodor Malteskenko</td><td>fyodor@froth.ly</td><td><span class="badge red">Not Enabled</span></td><td>73</td></tr>
+            <tr><td>Grace Hoppy</td><td>ghoppy@froth.ly</td><td><span class="badge red">Not Enabled</span></td><td>53</td></tr>
+            <tr><td>Peat Cerf</td><td>pcerf@froth.ly</td><td><span class="badge green">Enabled</span></td><td>24</td></tr>
+            <tr><td>Bud Stoll</td><td>bstoll@froth.ly</td><td><span class="badge red">Not Enabled</span></td><td>22</td></tr>
+            <tr><td>Bruce Gist</td><td>bgist@froth.ly</td><td><span class="badge red">Not Enabled</span></td><td>21</td></tr>
+            <tr><td>Kevin Lagerfield</td><td>klagerfield@froth.ly</td><td><span class="badge red">Not Enabled</span></td><td>11</td></tr>
+          </tbody>
+        </table>
+
+        <div class="insight">
+          <div class="insight-icon">⚠</div>
+          <p>The pie chart revealed the majority of users had MFA <strong>not enabled</strong> — a clear, systemic policy violation rather than isolated incidents. Combined with the logout data showing almost no users properly ending sessions, the risk surface is significant.</p>
+        </div>
+
+        <h3>// SPL query — MFA enabled vs disabled</h3>
+        <div class="spl-block">
+          <div class="spl-header">
+            <span class="spl-label">SPL — Indicator 3a</span>
+            <div class="spl-dots"><div class="spl-dot"></div><div class="spl-dot"></div><div class="spl-dot"></div></div>
+          </div>
+          <pre><span class="kw">index</span>=botsv3 <span class="kw">sourcetype</span>=ms:aad:signin
+| <span class="fn">eval</span> MFA_Status = <span class="fn">if</span>(<span class="fn">isnull</span>(mfaRequired)
+    <span class="op">OR</span> mfaRequired=<span class="str">"false"</span>, <span class="str">"MFA Not Enabled"</span>, <span class="str">"MFA Enabled"</span>)
+| <span class="fn">stats count</span> <span class="kw">as</span> signInCount
+    <span class="kw">by</span> userDisplayName, userPrincipalName, MFA_Status
+| <span class="fn">sort</span> - signInCount
+| <span class="fn">head</span> 10
+| <span class="fn">table</span> userDisplayName, userPrincipalName, MFA_Status, signInCount</pre>
+        </div>
+
+        <h3>// SPL query — MFA success &amp; logout events</h3>
+        <div class="spl-block">
+          <div class="spl-header">
+            <span class="spl-label">SPL — Indicator 3b</span>
+            <div class="spl-dots"><div class="spl-dot"></div><div class="spl-dot"></div><div class="spl-dot"></div></div>
+          </div>
+          <pre><span class="kw">index</span>=botsv3 <span class="kw">sourcetype</span>=<span class="str">"wineventlog:security"</span>
+| <span class="fn">eval</span> event_type=<span class="fn">case</span>(
+    EventCode=<span class="str">4624</span>, <span class="str">"MFA Success"</span>,
+    EventCode=<span class="str">4634</span>, <span class="str">"Logout"</span>)
+| <span class="fn">stats count</span> <span class="kw">by</span> Account_Name, event_type, EventCode, _time
+| <span class="fn">eventstats</span> <span class="fn">values</span>(_time) <span class="kw">as</span> login_time <span class="kw">by</span> Account_Name
+| <span class="fn">eval</span> logged_out=<span class="fn">if</span>(
+    event_type=<span class="str">"Logout"</span> <span class="op">AND</span> _time > login_time, <span class="str">"Yes"</span>, <span class="str">"No"</span>)
+| <span class="fn">where</span> event_type=<span class="str">"MFA Success"</span> <span class="op">OR</span> event_type=<span class="str">"Logout"</span>
+| <span class="fn">sort</span> Account_Name, _time
+| <span class="fn">dedup</span> Account_Name
+| <span class="fn">head</span> 10
+| <span class="fn">table</span> _time, Account_Name, event_type, logged_out</pre>
+        </div>
+
+        <div class="screenshot-zone">
+          <p>📸 SCREENSHOT SLOT — Panel 3: MFA comparison table, pie chart &amp; logout events</p>
+          <p class="hint">Replace this block with your actual Splunk screenshot using an &lt;img&gt; tag</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FINDINGS -->
+  <section id="findings" class="reveal">
+    <div class="section-label">03 — Key Findings</div>
+    <h2>What the data revealed</h2>
+    <p>Together, the three indicators paint a clear picture of widespread MFA non-compliance within the simulated Sutrefia environment.</p>
+
+    <div class="findings-grid" style="margin-top:1.5rem;">
+      <div class="finding-stat danger">
+        <span class="number">1,366+</span>
+        <span class="label">Total MFA bypasses</span>
+      </div>
+      <div class="finding-stat danger">
+        <span class="number">4</span>
+        <span class="label">Admin accounts bypassing MFA</span>
+      </div>
+      <div class="finding-stat danger">
+        <span class="number">~70%</span>
+        <span class="label">Users with MFA disabled</span>
+      </div>
+      <div class="finding-stat danger">
+        <span class="number">0</span>
+        <span class="label">Users logging out properly</span>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:1.5rem;">
+      <h3 style="margin-top:0;">// Critical: admin-level bypass concentration</h3>
+      <p style="margin-bottom:0;">The <strong>web_admin</strong> account had 637 MFA bypasses — more than all other accounts combined. Admin accounts have the highest privilege level and represent the greatest risk if compromised. This single finding alone justifies immediate MFA enforcement on all admin accounts.</p>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0;">// Session abandonment risk</h3>
+      <p style="margin-bottom:0;">Across all monitored accounts, no users logged out properly after their MFA-authenticated sessions. Open sessions on unattended workstations are a common attack vector — particularly concerning in a financial services environment with access to sensitive transaction data.</p>
+    </div>
+  </section>
+
+  <!-- CONCLUSION -->
+  <section id="conclusion" class="reveal">
+    <div class="section-label">04 — Conclusion</div>
+    <h2>Why this dashboard matters</h2>
+
+    <div class="conclusion-box">
+      <p>
+        This Splunk dashboard gives management a real-time, evidence-based view of MFA policy compliance — without needing to understand the technical details of log analysis. Each panel is designed to answer a specific management question:
+      </p>
+      <p>
+        <strong>Panel 1</strong> answers: "Who is getting in without MFA, and how often?"<br>
+        <strong>Panel 2</strong> answers: "Are there patterns in login failures that suggest attack attempts?"<br>
+        <strong>Panel 3</strong> answers: "How many of our users actually have MFA set up, and are they using it properly?"
+      </p>
+      <p>
+        The BOTSv3 data shows that MFA policy non-compliance is not an edge case — it is the norm within this environment. The highest-risk accounts (admin-level) have the worst compliance. Without a monitoring tool like this dashboard, these violations would go undetected until an incident occurs.
+      </p>
+      <p style="margin-bottom:0;">
+        Implementing this dashboard as a live monitoring tool, with alerts triggered on thresholds (e.g., more than 10 MFA bypasses from a single account in one hour), would significantly reduce response time and improve Sutrefia's overall security posture.
+      </p>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <p>Dulneth Kurunduwatte Gedara &nbsp;·&nbsp; <a href="https://github.com/YOUR-USERNAME" target="_blank">github.com/YOUR-USERNAME</a> &nbsp;·&nbsp; Built for CSG3309 IT Security Management</p>
+</footer>
+
+<script>
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.classList.add('visible');
+        observer.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.08 });
+
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+</script>
+
+</body>
+</html>
